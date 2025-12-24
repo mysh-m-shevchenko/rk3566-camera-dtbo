@@ -1,0 +1,170 @@
+/*
+ * Device tree overlay for OV9281 (Global Shutter Camera) on RK3566
+ *
+ * OmniVision OV9281 - 1MP MIPI CSI-2 global shutter sensor
+ * Monochrome sensor ideal for machine vision applications
+ * 1280x800 resolution with true global shutter
+ *
+ * Compatible with Radxa Zero 3W and similar RK3566-based boards
+ * Uses I2C2 and CSI2 DPHY0 in full mode (2 lanes)
+ *
+ * Note: Requires 2-lane CSI-2 module (1-lane modules not supported)
+ *
+ * Copyright (c) 2024 MYSh LLC
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings.h"
+
+/ {
+	compatible = "rockchip,rk3566";
+
+	metadata {
+		title = "OV9281 Camera (1MP Global Shutter)";
+		category = "camera";
+		exclusive = "csi2_dphy0";
+		description = "Enable OmniVision OV9281 1MP global shutter camera on CSI2 DPHY0";
+	};
+};
+
+&{/} {
+	clk_cam_24m: external-camera-clock-24m {
+		status = "okay";
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		clock-output-names = "clk_cam_24m";
+		#clock-cells = <0>;
+	};
+
+	ov9281_avdd: ov9281-avdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov9281_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	ov9281_dovdd: ov9281-dovdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov9281_dovdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	ov9281_dvdd: ov9281-dvdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov9281_dvdd";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	camera_ov9281: camera-ov9281@60 {
+		status = "okay";
+		compatible = "ovti,ov9281";
+		reg = <0x60>;
+		clocks = <&clk_cam_24m>;
+		clock-names = "xvclk";
+
+		avdd-supply = <&ov9281_avdd>;
+		dovdd-supply = <&ov9281_dovdd>;
+		dvdd-supply = <&ov9281_dvdd>;
+
+		reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_LOW>;
+		pwdn-gpios = <&gpio3 RK_PC5 GPIO_ACTIVE_HIGH>;
+
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "ov9281";
+		rockchip,camera-module-lens-name = "default";
+
+		port {
+			ov9281_out: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+};
+
+&csi2_dphy_hw {
+	status = "okay";
+};
+
+&csi2_dphy0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mipi_in_ucam0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&ov9281_out>;
+				data-lanes = <1 2>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			dphy0_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&isp0_in>;
+			};
+		};
+	};
+};
+
+&rkisp_vir0 {
+	status = "okay";
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		isp0_in: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&dphy0_out>;
+		};
+	};
+};
+
+&rkisp {
+	status = "okay";
+};
+
+&rkisp_mmu {
+	status = "okay";
+};
+
+&rkcif_mmu {
+	status = "okay";
+};
+
+&rkcif {
+	status = "okay";
+};

@@ -1,0 +1,170 @@
+/*
+ * Device tree overlay for IMX290/IMX327 (Low-Light Camera) on RK3566
+ *
+ * Sony IMX290/IMX327 - 2MP MIPI CSI-2 sensor for low-light/starlight
+ * The IMX290 and IMX327 use the same driver (imx290)
+ * Excellent for night vision and security applications
+ *
+ * Compatible with Radxa Zero 3W and similar RK3566-based boards
+ * Uses I2C2 and CSI2 DPHY0 in full mode (2 lanes)
+ *
+ * Note: IMX290 supports 1080p120, IMX327 supports 1080p60
+ *
+ * Copyright (c) 2024 MYSh LLC
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings.h"
+
+/ {
+	compatible = "rockchip,rk3566";
+
+	metadata {
+		title = "IMX290/IMX327 Camera (Low-Light 2MP)";
+		category = "camera";
+		exclusive = "csi2_dphy0";
+		description = "Enable Sony IMX290/IMX327 2MP low-light camera sensor on CSI2 DPHY0";
+	};
+};
+
+&{/} {
+	clk_cam_37m: external-camera-clock-37m {
+		status = "okay";
+		compatible = "fixed-clock";
+		clock-frequency = <37125000>;
+		clock-output-names = "clk_cam_37m";
+		#clock-cells = <0>;
+	};
+
+	imx290_vdda: imx290-vdda {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx290_vdda";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	imx290_vddd: imx290-vddd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx290_vddd";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	imx290_vdddo: imx290-vdddo {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx290_vdddo";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	camera_imx290: camera-imx290@1a {
+		status = "okay";
+		compatible = "sony,imx290";
+		reg = <0x1a>;
+		clocks = <&clk_cam_37m>;
+		clock-names = "xclk";
+
+		vdda-supply = <&imx290_vdda>;
+		vddd-supply = <&imx290_vddd>;
+		vdddo-supply = <&imx290_vdddo>;
+
+		reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_LOW>;
+
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "imx290";
+		rockchip,camera-module-lens-name = "default";
+
+		port {
+			imx290_out: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <222750000>;
+			};
+		};
+	};
+};
+
+&csi2_dphy_hw {
+	status = "okay";
+};
+
+&csi2_dphy0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mipi_in_ucam0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&imx290_out>;
+				data-lanes = <1 2>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			dphy0_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&isp0_in>;
+			};
+		};
+	};
+};
+
+&rkisp_vir0 {
+	status = "okay";
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		isp0_in: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&dphy0_out>;
+		};
+	};
+};
+
+&rkisp {
+	status = "okay";
+};
+
+&rkisp_mmu {
+	status = "okay";
+};
+
+&rkcif_mmu {
+	status = "okay";
+};
+
+&rkcif {
+	status = "okay";
+};

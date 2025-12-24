@@ -1,0 +1,180 @@
+/*
+ * Device tree overlay for OV5640 (5MP Autofocus Camera) on RK3566
+ *
+ * OmniVision OV5640 - 5MP MIPI CSI-2 sensor with autofocus
+ * Common sensor found in many camera modules
+ *
+ * Compatible with Radxa Zero 3W and similar RK3566-based boards
+ * Uses I2C2 and CSI2 DPHY0 in full mode (2 lanes)
+ *
+ * Copyright (c) 2024 MYSh LLC
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings.h"
+
+/ {
+	compatible = "rockchip,rk3566";
+
+	metadata {
+		title = "OV5640 Camera (5MP Autofocus)";
+		category = "camera";
+		exclusive = "csi2_dphy0";
+		description = "Enable OmniVision OV5640 5MP autofocus camera sensor on CSI2 DPHY0";
+	};
+};
+
+&{/} {
+	clk_cam_24m: external-camera-clock-24m {
+		status = "okay";
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		clock-output-names = "clk_cam_24m";
+		#clock-cells = <0>;
+	};
+
+	camera_pwdn_gpio: camera-pwdn-gpio {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "camera_pwdn_gpio";
+		regulator-always-on;
+		regulator-boot-on;
+		enable-active-high;
+		gpio = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
+	};
+
+	/* Power supplies for OV5640 */
+	ov5640_dovdd: ov5640-dovdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov5640_dovdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	ov5640_avdd: ov5640-avdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov5640_avdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	ov5640_dvdd: ov5640-dvdd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "ov5640_dvdd";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	camera_ov5640: camera-ov5640@3c {
+		status = "okay";
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+		clocks = <&clk_cam_24m>;
+		clock-names = "xclk";
+
+		DOVDD-supply = <&ov5640_dovdd>;
+		AVDD-supply = <&ov5640_avdd>;
+		DVDD-supply = <&ov5640_dvdd>;
+
+		reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_LOW>;
+		powerdown-gpios = <&gpio3 RK_PC5 GPIO_ACTIVE_HIGH>;
+
+		rotation = <0>;
+
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "ov5640";
+		rockchip,camera-module-lens-name = "default";
+
+		port {
+			ov5640_out: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+};
+
+&csi2_dphy_hw {
+	status = "okay";
+};
+
+&csi2_dphy0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mipi_in_ucam0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&ov5640_out>;
+				data-lanes = <1 2>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			dphy0_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&isp0_in>;
+			};
+		};
+	};
+};
+
+&rkisp_vir0 {
+	status = "okay";
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		isp0_in: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&dphy0_out>;
+		};
+	};
+};
+
+&rkisp {
+	status = "okay";
+};
+
+&rkisp_mmu {
+	status = "okay";
+};
+
+&rkcif_mmu {
+	status = "okay";
+};
+
+&rkcif {
+	status = "okay";
+};

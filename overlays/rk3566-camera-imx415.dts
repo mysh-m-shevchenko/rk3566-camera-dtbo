@@ -1,0 +1,168 @@
+/*
+ * Device tree overlay for IMX415 (4K Camera) on RK3566
+ *
+ * Sony IMX415 - 8.3MP MIPI CSI-2 sensor with 4K UHD support
+ * Diagonal 6.4mm (Type 1/2.8) CMOS image sensor
+ * Commonly used in security cameras and drones
+ *
+ * Compatible with Radxa Zero 3W and similar RK3566-based boards
+ * Uses I2C2 and CSI2 DPHY0 in full mode (2 lanes)
+ *
+ * Copyright (c) 2024 MYSh LLC
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings.h"
+
+/ {
+	compatible = "rockchip,rk3566";
+
+	metadata {
+		title = "IMX415 Camera (8MP 4K UHD)";
+		category = "camera";
+		exclusive = "csi2_dphy0";
+		description = "Enable Sony IMX415 8MP 4K UHD camera sensor on CSI2 DPHY0";
+	};
+};
+
+&{/} {
+	clk_cam_24m: external-camera-clock-24m {
+		status = "okay";
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;
+		clock-output-names = "clk_cam_24m";
+		#clock-cells = <0>;
+	};
+
+	imx415_vdda: imx415-vdda {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx415_vdda";
+		regulator-min-microvolt = <2900000>;
+		regulator-max-microvolt = <2900000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	imx415_vddd: imx415-vddd {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx415_vddd";
+		regulator-min-microvolt = <1100000>;
+		regulator-max-microvolt = <1100000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	imx415_vdddo: imx415-vdddo {
+		status = "okay";
+		compatible = "regulator-fixed";
+		regulator-name = "imx415_vdddo";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	camera_imx415: camera-imx415@1a {
+		status = "okay";
+		compatible = "sony,imx415";
+		reg = <0x1a>;
+		clocks = <&clk_cam_24m>;
+		clock-names = "xclk";
+
+		avdd-supply = <&imx415_vdda>;
+		dvdd-supply = <&imx415_vddd>;
+		ovdd-supply = <&imx415_vdddo>;
+
+		reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_LOW>;
+
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "imx415";
+		rockchip,camera-module-lens-name = "default";
+
+		port {
+			imx415_out: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				data-lanes = <1 2>;
+				link-frequencies = /bits/ 64 <445500000>;
+			};
+		};
+	};
+};
+
+&csi2_dphy_hw {
+	status = "okay";
+};
+
+&csi2_dphy0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mipi_in_ucam0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&imx415_out>;
+				data-lanes = <1 2>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			dphy0_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&isp0_in>;
+			};
+		};
+	};
+};
+
+&rkisp_vir0 {
+	status = "okay";
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		isp0_in: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&dphy0_out>;
+		};
+	};
+};
+
+&rkisp {
+	status = "okay";
+};
+
+&rkisp_mmu {
+	status = "okay";
+};
+
+&rkcif_mmu {
+	status = "okay";
+};
+
+&rkcif {
+	status = "okay";
+};
