@@ -1,0 +1,357 @@
+#!/bin/bash
+#
+# camera-overlay - Enable/disable camera device tree overlays on RK3566
+#
+# Copyright (c) 2024 MYSh LLC
+# Author: Maksym Shevchenko <maksym.shevchenko@mysh.studio>
+#
+# Usage:
+#   camera-overlay list              - List available overlays
+#   camera-overlay status            - Show enabled overlays
+#   camera-overlay enable <overlay>  - Enable an overlay
+#   camera-overlay disable <overlay> - Disable an overlay
+#   camera-overlay info <overlay>    - Show overlay information
+
+set -e
+
+VERSION="1.0.0"
+DTBO_DIR="/boot/dtbo"
+EXTLINUX_CONF="/boot/extlinux/extlinux.conf"
+UENV_TXT="/boot/uEnv.txt"
+OVERLAYS_LIST="/usr/share/rk3566-camera-dtbo/overlays.list"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_usage() {
+    cat << EOF
+camera-overlay v${VERSION} - Manage camera device tree overlays for RK3566
+
+Usage: camera-overlay <command> [overlay]
+
+Commands:
+  list              List all available camera overlays
+  status            Show currently enabled overlays
+  enable <overlay>  Enable a camera overlay (requires reboot)
+  disable <overlay> Disable a camera overlay (requires reboot)
+  info <overlay>    Show detailed information about an overlay
+
+Available overlays:
+EOF
+    if [ -d "$DTBO_DIR" ]; then
+        for dtbo in "$DTBO_DIR"/rk3566-camera-*.dtbo "$DTBO_DIR"/rk3566-hdmi-*.dtbo 2>/dev/null; do
+            if [ -f "$dtbo" ]; then
+                name=$(basename "$dtbo" .dtbo)
+                echo "  - $name"
+            fi
+        done
+    else
+        echo "  (no overlays installed)"
+    fi
+
+    cat << EOF
+
+Examples:
+  camera-overlay enable rk3566-camera-imx219
+  camera-overlay disable rk3566-hdmi-csi-tc358743
+  camera-overlay status
+
+Note: Changes require a reboot to take effect.
+EOF
+}
+
+# Get configuration file to use
+get_config_file() {
+    if [ -f "$EXTLINUX_CONF" ]; then
+        echo "$EXTLINUX_CONF"
+    elif [ -f "$UENV_TXT" ]; then
+        echo "$UENV_TXT"
+    else
+        echo ""
+    fi
+}
+
+# List available overlays
+cmd_list() {
+    echo -e "${BLUE}Available camera overlays:${NC}"
+    echo ""
+
+    if [ ! -d "$DTBO_DIR" ]; then
+        echo -e "${RED}Error: $DTBO_DIR not found${NC}"
+        exit 1
+    fi
+
+    local found=0
+    for dtbo in "$DTBO_DIR"/rk3566-camera-*.dtbo "$DTBO_DIR"/rk3566-hdmi-*.dtbo 2>/dev/null; do
+        if [ -f "$dtbo" ]; then
+            name=$(basename "$dtbo" .dtbo)
+            size=$(stat -c%s "$dtbo" 2>/dev/null || echo "?")
+
+            # Check if enabled
+            if is_overlay_enabled "$name"; then
+                status="${GREEN}[enabled]${NC}"
+            else
+                status="${YELLOW}[disabled]${NC}"
+            fi
+
+            printf "  %-35s %s (%s bytes)\n" "$name" "$status" "$size"
+            found=1
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        echo -e "${YELLOW}No camera overlays found in $DTBO_DIR${NC}"
+    fi
+}
+
+# Check if overlay is enabled
+is_overlay_enabled() {
+    local overlay="$1"
+    local config=$(get_config_file)
+
+    if [ -z "$config" ]; then
+        return 1
+    fi
+
+    grep -q "fdtoverlays.*${overlay}" "$config" 2>/dev/null || \
+    grep -q "overlays.*${overlay}" "$config" 2>/dev/null
+}
+
+# Show status of enabled overlays
+cmd_status() {
+    echo -e "${BLUE}Enabled camera overlays:${NC}"
+    echo ""
+
+    local config=$(get_config_file)
+
+    if [ -z "$config" ]; then
+        echo -e "${YELLOW}No configuration file found${NC}"
+        echo "Checked: $EXTLINUX_CONF, $UENV_TXT"
+        exit 1
+    fi
+
+    echo "Configuration file: $config"
+    echo ""
+
+    local found=0
+    for dtbo in "$DTBO_DIR"/rk3566-camera-*.dtbo "$DTBO_DIR"/rk3566-hdmi-*.dtbo 2>/dev/null; do
+        if [ -f "$dtbo" ]; then
+            name=$(basename "$dtbo" .dtbo)
+            if is_overlay_enabled "$name"; then
+                echo -e "  ${GREEN}● $name${NC}"
+                found=1
+            fi
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        echo -e "  ${YELLOW}No camera overlays are currently enabled${NC}"
+    fi
+
+    echo ""
+    echo "Active fdtoverlays line:"
+    grep -E "^[[:space:]]*fdtoverlays" "$config" 2>/dev/null || echo "  (none)"
+}
+
+# Enable an overlay
+cmd_enable() {
+    local overlay="$1"
+
+    if [ -z "$overlay" ]; then
+        echo -e "${RED}Error: Please specify an overlay to enable${NC}"
+        print_usage
+        exit 1
+    fi
+
+    # Check if overlay exists
+    local dtbo_file="$DTBO_DIR/${overlay}.dtbo"
+    if [ ! -f "$dtbo_file" ]; then
+        echo -e "${RED}Error: Overlay '$overlay' not found${NC}"
+        echo "Available overlays:"
+        cmd_list
+        exit 1
+    fi
+
+    local config=$(get_config_file)
+    if [ -z "$config" ]; then
+        echo -e "${RED}Error: No configuration file found${NC}"
+        exit 1
+    fi
+
+    # Check if already enabled
+    if is_overlay_enabled "$overlay"; then
+        echo -e "${YELLOW}Overlay '$overlay' is already enabled${NC}"
+        exit 0
+    fi
+
+    # Check for exclusive overlays (only one camera at a time on CSI2)
+    echo -e "${BLUE}Checking for conflicting overlays...${NC}"
+    local has_conflict=0
+    for dtbo in "$DTBO_DIR"/rk3566-camera-*.dtbo "$DTBO_DIR"/rk3566-hdmi-*.dtbo 2>/dev/null; do
+        if [ -f "$dtbo" ]; then
+            local existing=$(basename "$dtbo" .dtbo)
+            if [ "$existing" != "$overlay" ] && is_overlay_enabled "$existing"; then
+                echo -e "${YELLOW}Warning: '$existing' is already enabled and uses CSI2 DPHY0${NC}"
+                echo -e "Only one camera overlay can be active at a time."
+                read -p "Disable '$existing' and enable '$overlay'? [y/N] " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    cmd_disable "$existing"
+                else
+                    echo "Aborted."
+                    exit 1
+                fi
+            fi
+        fi
+    done
+
+    echo -e "${BLUE}Enabling overlay '$overlay'...${NC}"
+
+    # Backup configuration
+    cp "$config" "${config}.bak"
+
+    # Add overlay to configuration
+    if [ "$config" = "$EXTLINUX_CONF" ]; then
+        # For extlinux.conf
+        if grep -q "^[[:space:]]*fdtoverlays" "$config"; then
+            # Append to existing fdtoverlays line
+            sed -i "s|^\([[:space:]]*fdtoverlays.*\)|\1 $DTBO_DIR/${overlay}.dtbo|" "$config"
+        else
+            # Add new fdtoverlays line after fdt line
+            sed -i "/^[[:space:]]*fdt[[:space:]]/a\\    fdtoverlays $DTBO_DIR/${overlay}.dtbo" "$config"
+        fi
+    else
+        # For uEnv.txt
+        if grep -q "^overlays=" "$config"; then
+            sed -i "s|^overlays=\(.*\)|overlays=\1 ${overlay}|" "$config"
+        else
+            echo "overlays=${overlay}" >> "$config"
+        fi
+    fi
+
+    echo -e "${GREEN}Overlay '$overlay' enabled successfully!${NC}"
+    echo -e "${YELLOW}Please reboot for changes to take effect.${NC}"
+}
+
+# Disable an overlay
+cmd_disable() {
+    local overlay="$1"
+
+    if [ -z "$overlay" ]; then
+        echo -e "${RED}Error: Please specify an overlay to disable${NC}"
+        print_usage
+        exit 1
+    fi
+
+    local config=$(get_config_file)
+    if [ -z "$config" ]; then
+        echo -e "${RED}Error: No configuration file found${NC}"
+        exit 1
+    fi
+
+    # Check if currently enabled
+    if ! is_overlay_enabled "$overlay"; then
+        echo -e "${YELLOW}Overlay '$overlay' is not currently enabled${NC}"
+        exit 0
+    fi
+
+    echo -e "${BLUE}Disabling overlay '$overlay'...${NC}"
+
+    # Backup configuration
+    cp "$config" "${config}.bak"
+
+    # Remove overlay from configuration
+    if [ "$config" = "$EXTLINUX_CONF" ]; then
+        # Remove from fdtoverlays line
+        sed -i "s|[[:space:]]*$DTBO_DIR/${overlay}.dtbo||g" "$config"
+        # Clean up empty fdtoverlays line
+        sed -i '/^[[:space:]]*fdtoverlays[[:space:]]*$/d' "$config"
+    else
+        # For uEnv.txt
+        sed -i "s|[[:space:]]*${overlay}||g" "$config"
+        sed -i '/^overlays=[[:space:]]*$/d' "$config"
+    fi
+
+    echo -e "${GREEN}Overlay '$overlay' disabled successfully!${NC}"
+    echo -e "${YELLOW}Please reboot for changes to take effect.${NC}"
+}
+
+# Show overlay info
+cmd_info() {
+    local overlay="$1"
+
+    if [ -z "$overlay" ]; then
+        echo -e "${RED}Error: Please specify an overlay${NC}"
+        exit 1
+    fi
+
+    local dtbo_file="$DTBO_DIR/${overlay}.dtbo"
+    if [ ! -f "$dtbo_file" ]; then
+        echo -e "${RED}Error: Overlay '$overlay' not found${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Overlay information: $overlay${NC}"
+    echo ""
+    echo "File: $dtbo_file"
+    echo "Size: $(stat -c%s "$dtbo_file") bytes"
+    echo ""
+
+    if is_overlay_enabled "$overlay"; then
+        echo -e "Status: ${GREEN}enabled${NC}"
+    else
+        echo -e "Status: ${YELLOW}disabled${NC}"
+    fi
+    echo ""
+
+    # Try to extract metadata from dtbo (if fdtdump is available)
+    if command -v fdtdump &> /dev/null; then
+        echo "Device tree content:"
+        fdtdump "$dtbo_file" 2>/dev/null | head -50 || echo "(unable to dump)"
+    else
+        echo "(install device-tree-compiler for detailed info)"
+    fi
+}
+
+# Main
+case "${1:-}" in
+    list)
+        cmd_list
+        ;;
+    status)
+        cmd_status
+        ;;
+    enable)
+        if [ "$EUID" -ne 0 ]; then
+            echo -e "${RED}Error: This command requires root privileges${NC}"
+            echo "Please run: sudo camera-overlay enable $2"
+            exit 1
+        fi
+        cmd_enable "$2"
+        ;;
+    disable)
+        if [ "$EUID" -ne 0 ]; then
+            echo -e "${RED}Error: This command requires root privileges${NC}"
+            echo "Please run: sudo camera-overlay disable $2"
+            exit 1
+        fi
+        cmd_disable "$2"
+        ;;
+    info)
+        cmd_info "$2"
+        ;;
+    -h|--help|help)
+        print_usage
+        ;;
+    -v|--version)
+        echo "camera-overlay version $VERSION"
+        ;;
+    *)
+        print_usage
+        exit 1
+        ;;
+esac

@@ -1,0 +1,146 @@
+/*
+ * Device tree overlay for TC358743 HDMI to CSI-2 bridge on RK3566
+ *
+ * Toshiba TC358743XBG - HDMI 1.4 to MIPI CSI-2 bridge
+ * Supports up to 1080p60 in 2-lane mode on RK3566
+ *
+ * Compatible with Radxa Zero 3W and similar RK3566-based boards
+ * Uses I2C2 and CSI2 DPHY0 in full mode (2 lanes)
+ *
+ * Note: For 4-lane operation (1080p60), use tc358743-4lane overlay instead
+ *
+ * Copyright (c) 2024 MYSh LLC
+ */
+/dts-v1/;
+/plugin/;
+
+#include "dt-bindings.h"
+
+/ {
+	compatible = "rockchip,rk3566";
+
+	metadata {
+		title = "TC358743 HDMI to CSI-2 Bridge (2-lane)";
+		category = "camera";
+		exclusive = "csi2_dphy0";
+		description = "Enable Toshiba TC358743 HDMI to CSI-2 bridge on CSI2 DPHY0 (2-lane, up to 1080p30)";
+	};
+};
+
+&{/} {
+	/* TC358743 reference clock - 27MHz from external oscillator */
+	tc358743_refclk: tc358743-refclk {
+		status = "okay";
+		compatible = "fixed-clock";
+		clock-frequency = <27000000>;
+		clock-output-names = "tc358743_refclk";
+		#clock-cells = <0>;
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	tc358743: tc358743@0f {
+		status = "okay";
+		compatible = "toshiba,tc358743";
+		reg = <0x0f>;
+		clocks = <&tc358743_refclk>;
+		clock-names = "refclk";
+
+		/* Reset GPIO - directly control reset pin */
+		reset-gpios = <&gpio3 RK_PC6 GPIO_ACTIVE_LOW>;
+
+		/* Interrupt GPIO for HDMI hotplug detection */
+		/* Uncomment if your board has interrupt wired */
+		/* interrupt-parent = <&gpio3>; */
+		/* interrupts = <RK_PC5 IRQ_TYPE_LEVEL_LOW>; */
+
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "tc358743-hdmi";
+		rockchip,camera-module-lens-name = "hdmi-input";
+
+		port {
+			tc358743_out: endpoint {
+				remote-endpoint = <&mipi_in_ucam0>;
+				/* 2-lane mode for up to 1080p30 */
+				data-lanes = <1 2>;
+				clock-lanes = <0>;
+				clock-noncontinuous;
+				/* Link frequency for 1080p30: 297MHz */
+				link-frequencies = /bits/ 64 <297000000>;
+			};
+		};
+	};
+};
+
+&csi2_dphy_hw {
+	status = "okay";
+};
+
+&csi2_dphy0 {
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mipi_in_ucam0: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&tc358743_out>;
+				data-lanes = <1 2>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			dphy0_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&isp0_in>;
+			};
+		};
+	};
+};
+
+&rkisp_vir0 {
+	status = "okay";
+
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		isp0_in: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&dphy0_out>;
+		};
+	};
+};
+
+&rkisp {
+	status = "okay";
+};
+
+&rkisp_mmu {
+	status = "okay";
+};
+
+&rkcif_mmu {
+	status = "okay";
+};
+
+&rkcif {
+	status = "okay";
+};

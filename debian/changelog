@@ -1,0 +1,8 @@
+rk3566-camera-dtbo (1.0.0) bookworm; urgency=medium
+
+  * Initial release
+  * Camera overlays: IMX219, OV5647, IMX477, GC2053
+  * HDMI-CSI bridge: TC358743
+  * camera-overlay CLI utility for easy management
+
+ -- Maksym Shevchenko <maksym.shevchenko@mysh.studio>  Tue, 24 Dec 2024 12:00:00 +0000
