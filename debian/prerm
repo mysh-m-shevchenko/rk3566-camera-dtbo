@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Disable and stop TC358743 setup service
+        if [ -d /run/systemd/system ]; then
+            systemctl stop tc358743-setup.service || true
+            systemctl disable tc358743-setup.service || true
+        fi
+        ;;
+    failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

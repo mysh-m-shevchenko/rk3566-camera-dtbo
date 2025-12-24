@@ -1,0 +1,159 @@
+#!/bin/bash
+#
+# tc358743-setup - Initialize TC358743 HDMI-to-CSI bridge
+#
+# Copyright (c) 2024 MYSh LLC
+# Author: Maksym Shevchenko <maksym.shevchenko@mysh.studio>
+#
+# This script is called by tc358743-setup.service before Shelma starts.
+# It checks if the TC358743 overlay is enabled and configures EDID.
+#
+# Usage:
+#   tc358743-setup [resolution]
+#
+# Resolutions: 1080p30 (default), 1080p25, 720p60
+#
+
+set -e
+
+EDID_DIR="/usr/share/rk3566-camera-dtbo/edid"
+TC358743_OVERLAY="rk3566-hdmi-csi-tc358743"
+EXTLINUX_CONF="/boot/extlinux/extlinux.conf"
+UENV_TXT="/boot/uEnv.txt"
+LOG_TAG="tc358743-setup"
+
+# Default resolution
+RESOLUTION="${1:-1080p30}"
+
+log_info() {
+    logger -t "$LOG_TAG" -p info "$*"
+    echo "[INFO] $*"
+}
+
+log_error() {
+    logger -t "$LOG_TAG" -p err "$*"
+    echo "[ERROR] $*" >&2
+}
+
+log_warn() {
+    logger -t "$LOG_TAG" -p warning "$*"
+    echo "[WARN] $*"
+}
+
+# Check if TC358743 overlay is enabled in boot config
+is_tc358743_enabled() {
+    if [ -f "$EXTLINUX_CONF" ]; then
+        grep -q "$TC358743_OVERLAY" "$EXTLINUX_CONF" 2>/dev/null && return 0
+    fi
+    if [ -f "$UENV_TXT" ]; then
+        grep -q "$TC358743_OVERLAY" "$UENV_TXT" 2>/dev/null && return 0
+    fi
+    return 1
+}
+
+# Find the TC358743 video device
+find_tc358743_device() {
+    # Look for v4l-subdev with TC358743
+    for subdev in /dev/v4l-subdev*; do
+        if [ -e "$subdev" ]; then
+            local name=$(v4l2-ctl -d "$subdev" --info 2>/dev/null | grep "Card type" | cut -d: -f2 | tr -d ' ')
+            if echo "$name" | grep -qi "tc358743"; then
+                echo "$subdev"
+                return 0
+            fi
+        fi
+    done
+
+    # Fallback: try common video devices
+    for dev in /dev/video0 /dev/video1 /dev/video2; do
+        if [ -e "$dev" ]; then
+            local name=$(v4l2-ctl -d "$dev" --info 2>/dev/null | grep "Card type" | cut -d: -f2 | tr -d ' ')
+            if echo "$name" | grep -qi "tc358743"; then
+                echo "$dev"
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
+# Set EDID on the device
+set_edid() {
+    local device="$1"
+    local resolution="$2"
+    local edid_file="${EDID_DIR}/${resolution}edid"
+
+    if [ ! -f "$edid_file" ]; then
+        log_error "EDID file not found: $edid_file"
+        log_info "Available EDID files:"
+        ls -1 "$EDID_DIR"/*edid 2>/dev/null || echo "  (none)"
+        return 1
+    fi
+
+    log_info "Setting EDID for $resolution on $device"
+
+    # Set EDID using v4l2-ctl
+    if v4l2-ctl -d "$device" --set-edid=file="$edid_file" 2>&1; then
+        log_info "EDID set successfully"
+        return 0
+    else
+        log_error "Failed to set EDID"
+        return 1
+    fi
+}
+
+# Query current HDMI signal status
+query_hdmi_status() {
+    local device="$1"
+
+    log_info "Querying HDMI signal status..."
+
+    # Try to get timing information
+    if v4l2-ctl -d "$device" --query-dv-timings 2>&1; then
+        log_info "DV timings query successful"
+    else
+        log_warn "No HDMI signal detected (this is normal if no source is connected)"
+    fi
+}
+
+# Main
+main() {
+    log_info "TC358743 HDMI-to-CSI setup starting..."
+
+    # Check if overlay is enabled
+    if ! is_tc358743_enabled; then
+        log_info "TC358743 overlay is not enabled, skipping setup"
+        exit 0
+    fi
+
+    log_info "TC358743 overlay is enabled"
+
+    # Wait a moment for device to be available
+    sleep 1
+
+    # Find the device
+    local device
+    device=$(find_tc358743_device)
+
+    if [ -z "$device" ]; then
+        log_warn "TC358743 device not found (driver may not be loaded yet)"
+        log_info "The device will be configured when it becomes available"
+        exit 0
+    fi
+
+    log_info "Found TC358743 device: $device"
+
+    # Set EDID
+    if ! set_edid "$device" "$RESOLUTION"; then
+        log_error "Failed to configure EDID"
+        exit 1
+    fi
+
+    # Query status
+    query_hdmi_status "$device"
+
+    log_info "TC358743 setup completed successfully"
+}
+
+main "$@"

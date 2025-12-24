@@ -1,0 +1,27 @@
+[Unit]
+Description=TC358743 HDMI-to-CSI Bridge Setup
+Documentation=https://github.com/maksym-1978/rk3566-camera-dtbo
+
+# Run after basic system is up but before camera services
+After=local-fs.target
+After=systemd-modules-load.service
+Before=shelma.service
+Before=rkipc.service
+
+# Only run if v4l2-ctl is available
+ConditionPathExists=/usr/bin/v4l2-ctl
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/tc358743-setup
+
+# Allow time for device initialization
+TimeoutStartSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

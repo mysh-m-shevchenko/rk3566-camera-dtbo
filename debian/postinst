@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    configure)
+        # Enable TC358743 setup service
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            systemctl enable tc358743-setup.service || true
+            echo "TC358743 setup service enabled"
+            echo "The service will run automatically on boot when TC358743 overlay is enabled"
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

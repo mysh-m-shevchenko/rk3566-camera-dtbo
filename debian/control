@@ -8,6 +8,7 @@ Build-Depends: debhelper-compat (= 13), device-tree-compiler
 Package: rk3566-camera-dtbo
 Architecture: arm64
 Depends: ${misc:Depends}
+Recommends: v4l-utils
 Description: Device tree overlays for RK3566 cameras and HDMI-CSI bridges
  Provides device tree overlays for camera support on RK3566 SoC:
  .
@@ -18,4 +19,5 @@ Description: Device tree overlays for RK3566 cameras and HDMI-CSI bridges
   - TC358743 (Toshiba HDMI to CSI-2 bridge)
  .
  Includes camera-overlay utility for easy enable/disable of camera overlays.
+ TC358743 HDMI-CSI bridge includes automatic EDID setup via systemd service.
  Compatible with Radxa Zero 3W and similar RK3566-based boards.

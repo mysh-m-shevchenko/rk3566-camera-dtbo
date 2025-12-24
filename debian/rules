@@ -25,10 +25,18 @@ override_dh_auto_install:
 	mkdir -p debian/rk3566-camera-dtbo/boot/dtbo
 	mkdir -p debian/rk3566-camera-dtbo/usr/bin
 	mkdir -p debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo
+	mkdir -p debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/edid
+	mkdir -p debian/rk3566-camera-dtbo/lib/systemd/system
 	# Copy compiled overlays
 	cp $(BUILDDIR)/*.dtbo debian/rk3566-camera-dtbo/boot/dtbo/
 	# Install camera-overlay utility
 	install -m 755 bin/camera-overlay debian/rk3566-camera-dtbo/usr/bin/
+	# Install TC358743 setup script
+	install -m 755 bin/tc358743-setup debian/rk3566-camera-dtbo/usr/bin/
+	# Install EDID files for TC358743
+	install -m 644 edid/*edid debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/edid/
+	# Install systemd service
+	install -m 644 systemd/tc358743-setup.service debian/rk3566-camera-dtbo/lib/systemd/system/
 	# Install overlay list
 	echo "# Available camera overlays" > debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/overlays.list
 	for dtbo in debian/rk3566-camera-dtbo/boot/dtbo/*.dtbo; do \
