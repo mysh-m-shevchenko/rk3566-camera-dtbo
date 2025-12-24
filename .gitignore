@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+*.dtbo
+
+# Debian build artifacts
+debian/rk3566-camera-dtbo/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/tmp/
+
+# Generated packages
+*.deb
+*.buildinfo
+*.changes

@@ -1,15 +1,23 @@
 #!/usr/bin/make -f
 
+export DH_VERBOSE=1
+BUILDDIR=build
+
 %:
 	dh $@
 
+override_dh_auto_clean:
+	rm -rf $(BUILDDIR) debian/rk3566-camera-dtbo
+
 override_dh_auto_build:
-	mkdir -p debian/tmp/boot/dtbo
+	mkdir -p $(BUILDDIR)
 	# Compile device tree overlays with preprocessor support
+	# grep -v '^#' filters out cpp line number comments that dtc doesn't understand
 	for dts in overlays/*.dts; do \
 		if [ -f "$$dts" ]; then \
 			cpp -nostdinc -I overlays -undef -x assembler-with-cpp $$dts | \
-			dtc -@ -I dts -O dtb -o debian/tmp/boot/dtbo/$$(basename $$dts .dts).dtbo -; \
+			grep -v '^#' | \
+			dtc -@ -I dts -O dtb -o $(BUILDDIR)/$$(basename $$dts .dts).dtbo -; \
 		fi; \
 	done
 
@@ -18,13 +26,11 @@ override_dh_auto_install:
 	mkdir -p debian/rk3566-camera-dtbo/usr/bin
 	mkdir -p debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo
 	# Copy compiled overlays
-	if [ -d debian/tmp/boot/dtbo ]; then \
-		cp debian/tmp/boot/dtbo/*.dtbo debian/rk3566-camera-dtbo/boot/dtbo/ 2>/dev/null || true; \
-	fi
+	cp $(BUILDDIR)/*.dtbo debian/rk3566-camera-dtbo/boot/dtbo/
 	# Install camera-overlay utility
 	install -m 755 bin/camera-overlay debian/rk3566-camera-dtbo/usr/bin/
 	# Install overlay list
 	echo "# Available camera overlays" > debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/overlays.list
 	for dtbo in debian/rk3566-camera-dtbo/boot/dtbo/*.dtbo; do \
-		basename $$dtbo .dtbo >> debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/overlays.list 2>/dev/null || true; \
+		basename $$dtbo .dtbo >> debian/rk3566-camera-dtbo/usr/share/rk3566-camera-dtbo/overlays.list; \
 	done
