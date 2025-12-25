@@ -1,3 +1,9 @@
+rk3566-camera-dtbo (0.7.1) bookworm; urgency=medium
+
+  * Sync version with rsdk release v0.7.1
+
+ -- MYSh LLC <maksym.shevchenko@mysh.studio>  Thu, 25 Dec 2025 14:19:21 +0200
+
 rk3566-camera-dtbo (0.7.0) bookworm; urgency=medium
 
   * Sync version with rsdk release v0.7.0
