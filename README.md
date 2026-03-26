@@ -195,6 +195,49 @@ Adjust link frequency in the overlay source (`.dts` file) and rebuild.
 
 Some sensors (especially IMX708) require proper ISP tuning files (IQ files) for correct color rendering.
 
+## HDMI Capture Playback (Mali GPU)
+
+Once TC358743 is configured, you can display the captured HDMI feed using the Mali GPU for GL-accelerated rendering.
+
+### Quick Start
+
+```bash
+start-mali-playback
+```
+
+### Manual Steps
+
+1. Load the Mali bifrost GPU driver:
+   ```bash
+   sudo modprobe bifrost_kbase
+   ```
+
+2. Set EDID and detect timings:
+   ```bash
+   sudo v4l2-ctl --set-edid=file=/usr/share/rk3566-camera-dtbo/edid/1080p30edid -d /dev/v4l-subdev3
+   sudo v4l2-ctl -d /dev/v4l-subdev3 --set-dv-bt-timings query
+   ```
+
+3. Configure media pipeline format:
+   ```bash
+   media-ctl -d /dev/media0 --set-v4l2 "\"m00_b_tc35874x 2-000f\":0[fmt:UYVY8_2X8/1920x1080]"
+   ```
+
+4. Run GStreamer playback with GL sink:
+   ```bash
+   GST_GL_API=gles2 GST_GL_PLATFORM=egl \
+       gst-launch-1.0 v4l2src device=/dev/video0 \
+       ! video/x-raw,width=1920,height=1080,format=NV12 \
+       ! glimagesink sync=no
+   ```
+
+### Notes
+
+- Requires `bifrost_kbase` kernel module (Mali-G52 on RK3566)
+- GStreamer GL plugins must be installed (`gstreamer1.0-gl`)
+- The pipeline outputs NV12 1080p from TC358743 via V4L2, rendered through EGL/GLES2
+- Tested on Radxa Zero 3W (RK3566)
+
 ## Building from Source
 
 ```bash

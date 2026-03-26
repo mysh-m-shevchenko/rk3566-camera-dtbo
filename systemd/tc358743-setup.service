@@ -1,6 +1,6 @@
 [Unit]
 Description=TC358743 HDMI-to-CSI Bridge Setup
-Documentation=https://github.com/maksym-1978/rk3566-camera-dtbo
+Documentation=https://github.com/mysh-m-shevchenko/rk3566-camera-dtbo
 
 # Run after basic system is up but before camera services
 After=local-fs.target

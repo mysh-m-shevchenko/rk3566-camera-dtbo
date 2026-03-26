@@ -51,30 +51,18 @@ is_tc358743_enabled() {
     return 1
 }
 
-# Find the TC358743 video device
+# Find the TC358743 video device using media-ctl
 find_tc358743_device() {
-    # Look for v4l-subdev with TC358743
-    for subdev in /dev/v4l-subdev*; do
-        if [ -e "$subdev" ]; then
-            local name=$(v4l2-ctl -d "$subdev" --info 2>/dev/null | grep "Card type" | cut -d: -f2 | tr -d ' ')
-            if echo "$name" | grep -qi "tc358743"; then
-                echo "$subdev"
-                return 0
-            fi
+    local media_dev
+    for media_dev in /dev/media0 /dev/media1 /dev/media2; do
+        [ -e "$media_dev" ] || continue
+        local subdev
+        subdev=$(media-ctl -d "$media_dev" -e "m00_b_tc35874x 2-000f" 2>/dev/null)
+        if [ -n "$subdev" ] && [ -e "$subdev" ]; then
+            echo "$subdev"
+            return 0
         fi
     done
-
-    # Fallback: try common video devices
-    for dev in /dev/video0 /dev/video1 /dev/video2; do
-        if [ -e "$dev" ]; then
-            local name=$(v4l2-ctl -d "$dev" --info 2>/dev/null | grep "Card type" | cut -d: -f2 | tr -d ' ')
-            if echo "$name" | grep -qi "tc358743"; then
-                echo "$dev"
-                return 0
-            fi
-        fi
-    done
-
     return 1
 }
 
